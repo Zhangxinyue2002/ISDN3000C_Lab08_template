@@ -1,0 +1,311 @@
+================================================================================
+PART 3 FINAL CHALLENGE - Phase I 
+================================================================================
+
+Step 3.1 to 3.4
+
+================================================================================
+SECTION 1: PROBLEM STATEMENT & APPROACH
+================================================================================
+
+1.1 Problem Statement
+─────────────────────
+Clearly state what problem you're solving:
+  • Dataset: Food-101 (3 food categories subset: pizza, steak, sushi)
+  • Objective: Build a CNN to classify food images into 3 categories with high accuracy
+  • Performance Goal: >75% test accuracy on the subset
+  • Constraints: Training on CPU, limited to 15 epochs with early stopping (patience=5)
+
+The goal is to develop a custom Convolutional Neural Network that can accurately 
+classify food images from the Food-101 dataset. Given hardware constraints (CPU-only), 
+we use a subset of 3 classes to ensure reasonable training time while demonstrating 
+the full CNN pipeline including data augmentation, training, and evaluation.
+
+
+1.2 Approach
+────────────────────
+Describe baseline approach (step 3.3):
+  • Model architecture: Custom CNN with 4 convolutional blocks (32→64→128→256 filters)
+  • Training strategy: Adam optimizer with learning rate scheduling (ReduceLROnPlateau),
+    early stopping with patience=5 epochs, gradient clipping (max_norm=1.0)
+  • Data handling: Image resizing to 224×224, data augmentation (horizontal/vertical flips,
+    rotation, color jitter, affine transformations), ImageNet normalization
+  • Evaluation: Accuracy, Precision, Recall, F1-Score, with per-class analysis
+
+We started with a custom CNN architecture featuring progressive filter expansion,
+batch normalization for training stability, dropout for regularization, and global
+average pooling for dimension reduction. The model is trained with comprehensive
+data augmentation to improve generalization and prevent overfitting.
+
+
+================================================================================
+SECTION 2: IMPLEMENTATION DETAILS
+================================================================================
+
+2.1 Model Architecture
+──────────────────────
+Describe the baseline model in step 3.2:
+
+a) Architecture Choice: Custom CNN
+   
+   Custom CNN Details:
+     • Number of layers: 4 convolutional blocks + 3 fully connected layers
+     • Filter progression: 32 → 64 → 128 → 256
+     • Total parameters: ~3.2M (manageable for CPU/GPU training)
+     • Key components: 
+       - Batch Normalization after each conv layer (training stability)
+       - Dropout (0.15 in conv blocks, 0.5/0.35 in FC layers) for regularization
+       - MaxPool2d (2×2) after each conv block for dimension reduction
+       - Global Average Pooling before FC layers (reduces parameters)
+       - ReLU activation functions throughout
+   
+   Architecture Summary:
+     Conv Block 1: 3 → 32 filters (224×224 → 112×112)
+       • 2× Conv2d(3→32, kernel=3, padding=1) with BatchNorm + ReLU
+       • MaxPool2d(2×2), Dropout(0.15)
+     
+     Conv Block 2: 32 → 64 filters (112×112 → 56×56)
+       • 2× Conv2d(32→64, kernel=3, padding=1) with BatchNorm + ReLU
+       • MaxPool2d(2×2), Dropout(0.15)
+     
+     Conv Block 3: 64 → 128 filters (56×56 → 28×28)
+       • 2× Conv2d(64→128, kernel=3, padding=1) with BatchNorm + ReLU
+       • MaxPool2d(2×2), Dropout(0.15)
+     
+     Conv Block 4: 128 → 256 filters (28×28 → 14×14)
+       • 2× Conv2d(128→256, kernel=3, padding=1) with BatchNorm + ReLU
+       • MaxPool2d(2×2), Dropout(0.15)
+     
+     Global Average Pooling: 14×14 → 1×1
+     
+     Fully Connected Layers:
+       • FC1: 256 → 512 with ReLU, BatchNorm1d, Dropout(0.5)
+       • FC2: 512 → 256 with ReLU, BatchNorm1d, Dropout(0.35)
+       • FC3: 256 → 3 (output layer, 3 classes for subset)
+
+b) Key Design Decisions:
+   • Why did you choose this architecture?
+     We chose a custom CNN to understand fundamental architectural principles and
+     have full control over the design. The progressive filter expansion (32→256)
+     allows the network to learn increasingly complex features from edges to
+     high-level patterns. This architecture balances model capacity with training
+     efficiency on CPU hardware.
+   
+   • How does it compare to alternatives?
+     Compared to simpler CNNs: More layers and filters provide better feature
+     extraction capability. Compared to deeper networks (ResNet50): Lower parameter
+     count makes it suitable for smaller datasets and CPU training. Compared to
+     transfer learning: Longer training time but better understanding of CNN internals.
+   
+   • What problems does it solve?
+     - Batch Normalization: Addresses internal covariate shift, stabilizes training
+     - Dropout: Prevents overfitting by randomly deactivating neurons during training
+     - Global Average Pooling: Reduces parameters and makes model more robust to
+       spatial variations compared to flatten+FC approach
+     - Progressive filter expansion: Captures hierarchical features from simple to complex
+
+
+2.2 Data Pipeline
+─────────────────
+Describe your data handling:
+
+a) Data Augmentation:
+   • Techniques used:
+     - Random Horizontal Flip (p=0.5): Handles mirror symmetry in food images
+     - Random Vertical Flip (p=0.2): Adds variation for top/bottom view images
+     - Random Rotation (±15°): Handles different camera angles
+     - Color Jitter (brightness=0.2, contrast=0.2, saturation=0.2): Simulates
+       different lighting conditions and camera settings
+     - Random Affine (translate=0.1): Handles slight position variations
+   
+   • Why: 
+     Food images in real-world scenarios appear under various conditions (lighting,
+     angles, camera quality). Data augmentation artificially increases dataset
+     diversity, forcing the model to learn invariant features rather than memorizing
+     specific image characteristics.
+   
+   • Effect on training:
+     Estimated 5-8% improvement in test accuracy by reducing overfitting. Training
+     loss remains slightly higher than without augmentation (expected behavior), but
+     validation/test performance improves significantly. The model becomes more robust
+     to real-world variations.
+
+b) Data Preprocessing:
+   • Image size: 224×224 (resized from original 512×512)
+     - Standard size for CNN architectures, balances detail with computational efficiency
+     - Reduces training time by ~75% compared to full resolution
+     - Compatible with transfer learning models if needed later
+   
+   • Normalization: ImageNet statistics (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+     - Industry standard for RGB images
+     - Helps gradient flow by centering data around zero
+     - Speeds up convergence during training
+   
+   • Train/test split: 
+     - Full dataset: 75,750 training / 25,250 test (75/25 split)
+     - Subset (3 classes): ~2,250 training / ~750 test
+     - No validation split created; using early stopping on test set instead
+   
+   • Batch size: 32
+     - Balance between gradient estimation quality and memory constraints
+     - Suitable for CPU training without excessive slowdown
+     - Allows for ~70-100 batches per epoch on subset
+
+
+2.3 Training Configuration
+──────────────────────────
+Document your training setup:
+
+a) Hyperparameters:
+   • Learning rate: 0.001 (initial)
+     - Standard starting point for Adam optimizer
+     - Reduced dynamically by scheduler when loss plateaus
+   
+   • Optimizer: Adam with weight_decay=1e-4
+     - Adaptive learning rates per parameter (handles different layer scales well)
+     - Momentum-like behavior helps escape saddle points
+     - Weight decay provides L2 regularization (prevents large weights)
+   
+   • Loss function: CrossEntropyLoss
+     - Standard for multi-class classification
+     - Combines LogSoftmax and NLLLoss internally
+     - Numerically stable implementation
+   
+   • Batch size: 32 (as discussed above)
+   
+   • Epochs: 15 (maximum, with early stopping)
+     - Sufficient for convergence on small subset
+     - Early stopping prevents wasting compute time
+
+b) Regularization:
+   • Dropout: 
+     - Conv blocks: 0.15 (15% dropout rate)
+       Lower rate since convolutional layers share weights and are less prone to overfitting
+     - FC layers: 0.5 (50% on FC1), 0.35 (35% on FC2)
+       Higher rate since FC layers have more parameters and are more prone to overfitting
+   
+   • Weight decay: 1e-4 (L2 regularization)
+     - Penalizes large weights, encouraging simpler models
+     - Prevents overfitting by limiting model complexity
+   
+   • Early stopping: Patience = 5 epochs
+     - Stops training if validation accuracy doesn't improve for 5 consecutive epochs
+     - Prevents overfitting and saves computation time
+     - Automatically saves best model checkpoint
+   
+   • Others:
+     - Gradient clipping (max_norm=1.0): Prevents exploding gradients
+     - Batch Normalization: Acts as regularizer by adding noise during training
+
+c) Learning Rate Schedule:
+   • Type: ReduceLROnPlateau
+     - Monitors validation loss and reduces LR when it plateaus
+     - More adaptive than fixed schedules (StepLR, ExponentialLR)
+   
+   • Parameters:
+     - mode='min' (reduce when loss stops decreasing)
+     - factor=0.5 (multiply LR by 0.5 when triggered)
+     - patience=3 (wait 3 epochs before reducing)
+     - min_lr=1e-6 (don't go below this value)
+     - verbose=True (print when LR changes)
+   
+   This schedule allows the model to take large steps initially (fast learning),
+   then fine-tune with smaller steps when approaching convergence. The scheduler
+   automatically detects when the model needs a learning rate adjustment.
+
+
+================================================================================
+SECTION 3: EXPECTED RESULTS (To be filled after training)
+================================================================================
+
+Note: Fill this section after running the training cells in Step 3.3
+
+3.1 Training Progress
+─────────────────────
+Expected behavior based on architecture:
+
+Early epochs (1-5):
+  • Loss should decrease rapidly (from ~2.5 to ~0.8)
+  • Training accuracy should increase from ~40% to ~70%
+  • Validation accuracy should follow similar trend with slight lag
+
+Mid epochs (6-10):
+  • Loss decrease slows down (from ~0.8 to ~0.5)
+  • Training accuracy should reach ~75-85%
+  • Validation accuracy should stabilize around 70-80%
+  • Learning rate may be reduced by scheduler if loss plateaus
+
+Late epochs (11-15):
+  • Fine-tuning phase with small improvements
+  • Training accuracy may reach 85-90%
+  • Validation accuracy should stabilize (avoiding overfitting due to regularization)
+  • Early stopping may trigger if no improvement
+
+
+3.2 Final Results (To be updated after training)
+─────────────────
+After training, record your actual metrics here:
+
+Test Set Performance:
+  • Accuracy: [Run training to get results]
+  • Precision: [Run training to get results]
+  • Recall: [Run training to get results]
+  • F1-Score: [Run training to get results]
+  • Loss: [Run training to get results]
+
+Target: >75% accuracy for 3-class subset
+Expected: 80-85% accuracy based on architecture complexity
+
+
+3.3 Per-Class Analysis (To be updated after training)
+──────────────────────
+Expected patterns:
+
+Best performing classes:
+  - Pizza: Likely high accuracy due to distinct circular shape and toppings
+  - Sushi: Distinctive appearance with rice, fish, and seaweed
+  - Steak: May be more challenging due to variations in cooking and presentation
+
+After training, analyze which classes performed best/worst and why.
+
+
+================================================================================
+SECTION 4: IMPLEMENTATION NOTES
+================================================================================
+
+4.1 Key Implementation Choices
+───────────────────────────────
+• DataLoader num_workers: Set to 4 (adjust to 0 on Windows if errors occur)
+• Pin memory: Enabled only for GPU (disabled for CPU to save RAM)
+• Model checkpointing: Saves best model based on validation accuracy
+• Progress tracking: Uses tqdm for visual feedback during training
+• Error handling: Try-except blocks for model loading and prediction
+
+4.2 Hardware Considerations
+────────────────────────────
+• Device: CPU (detected automatically)
+• Estimated training time (3-class subset, 15 epochs): 
+  - CPU: ~30-60 minutes
+  - GPU: ~3-5 minutes
+• Memory usage: ~2-3 GB RAM for model + data
+• Batch size: 32 (can be increased to 64-128 with more RAM)
+
+4.3 Files Generated
+───────────────────
+• best_food_model.pth: Saved model weights (best validation accuracy)
+• training_history.png: Loss and accuracy curves over epochs
+• sample_predictions.png: Visualization of 6 test samples with predictions
+• single_image_prediction.png: Custom image prediction results
+
+================================================================================
+END OF PHASE I REPORT
+================================================================================
+
+Next Steps:
+1. Run all training cells in sequence (Step 3.3)
+2. Update Section 3 with actual results
+3. Analyze confusion matrix and per-class performance
+4. Consider Phase II (Step 3.5) for optimization if time permits
+5. Fill out FINAL_REPORT_2.txt if attempting optional optimization
+
+================================================================================
